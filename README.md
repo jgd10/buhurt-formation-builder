@@ -1,8 +1,10 @@
 # Formation Ledger — Buhurt Tactical Formation Analysis Tool
 
-A single-file, no-build browser tool for recording and analysing Buhurt team formations as time-indexed snapshots. Built to match the spec: match/team/fighter setup, a timeline of snapshots, a drag-and-drop (or click-to-place) formation editor with numeric slots, and versioned JSON import/export.
+A single-file, no-build browser tool for recording and analysing Buhurt team formations as time-indexed snapshots on a to-scale list (field).
 
-It does not simulate combat, physics, or outcomes — it's a recording and review tool. All tactical interpretation of slot numbers is left to you.
+It does not simulate combat, physics, or outcomes — it's a recording and review tool. Where fighters stand, who's engaged with whom, and what weapon they're carrying at any moment is left entirely to what you record.
+
+**v2 changes:** the field is now a real, to-scale rectangle sized to your chosen format (3v3/5v5/12v12/30v30) and list dimensions in metres, fighters are freely positioned (drag anywhere) rather than snapped to numbered slots, and each snapshot records weapon, down/disarmed status, and engagement links per fighter, plus draggable marshal/linesman markers. Files exported from the old slot-based version (v1) are auto-migrated on import.
 
 ## Running it
 
@@ -20,14 +22,15 @@ No server, database, or API keys are needed — it's entirely client-side.
 
 ## How it works
 
-- **Match** — title, date, location, notes, and the two teams (name + up to 3 colours each).
-- **Fighters** — added per team, with name, optional belt number, type (grappler/striker/generalist/runner/other), stored per-match (no persistent global roster, per spec).
-- **Timeline** — snapshots in the order you create them. Click **+** to add one, click a chip to open it, **Duplicate** to branch a variation.
-- **Snapshot editor** — set timestamp, phase label, notes, and slot count, then assign fighters into numbered slots for each team:
-  - Click a fighter card in the roster to "arm" it, then click a slot to place it (works well on touch/mobile).
-  - Or drag a fighter card straight onto a slot (desktop).
-  - A fighter can only occupy one slot per team per snapshot — placing it elsewhere moves it automatically.
-  - Click the **×** on a filled slot to clear it.
+- **Match** — title, date, location, notes, format (3v3/5v5/12v12/30v30 — each constrains the list's allowed length/width range per the rules), list length and width in metres, and the two teams (name + up to 3 colours each).
+- **Fighters** — added per team, with name, optional belt number, type (grappler/striker/generalist/runner/other), and a default weapon. Stored per-match, no persistent global roster.
+- **Marshals & linesmen** — the gold dots. Add as many as you like from the match card; drag them into position directly on the list; click one on the list to remove it. They're shared across the whole match rather than reset per snapshot.
+- **Timeline** — snapshots in the order you create them. Click **+** to add one (it starts as a copy of the previous snapshot, so you're not rebuilding everyone from scratch each time), click a chip to open it, **Duplicate** to branch a variation.
+- **The list (snapshot editor)** — a to-scale top-down view of the field:
+  - Fighters not yet on the list sit in the **bench** row below it; click a name to drop them onto their team's side.
+  - Drag any fighter or marshal directly on the list to reposition them freely — there's no grid or slots, just real coordinates.
+  - Click a fighter to open the **inspector**, where you can set their current weapon (with a free-text "Other" option), toggle **Down** (they stay on the list, greyed out, as part of the battlefield) and **Disarmed**, and link/unlink **engagements** with any other fighter on the list — including across teams, and more than one at once for group fights. Engaged pairs are drawn as connecting lines on the field.
+  - Click **Remove from list** in the inspector to send a fighter back to the bench for that snapshot.
 
 ## Data & persistence
 
@@ -36,12 +39,16 @@ No server, database, or API keys are needed — it's entirely client-side.
 - **Export JSON** downloads a versioned file matching the spec's schema (`{ "version": 1, "match": {...} }`).
 - **Import JSON** loads a previously exported file, replacing whatever match is currently open.
 
-## Known constraints (by design, per spec)
+## Known constraints (by design)
 
 - Exactly 2 teams per match, up to 3 colours per team.
-- Slot keys are numeric strings ("1"–N"), consistent within a snapshot.
-- No combat simulation, AI, scoring, or enforced tactical meaning — slot positions are whatever your team decides they mean.
+- List length/width are clamped to the selected format's allowed range (e.g. 5v5 is 9–20m long, 7–15m wide).
+- No combat simulation, AI, scoring, or enforced tactical meaning — positions, weapons, and engagements are whatever you record; the app just shows it back to you.
+
+## Data & versioning
+
+Exports are tagged `"version": 2`. Older `version: 1` files (numbered-slot formations, no weapons/engagements/list dimensions) are auto-migrated on import: fighters are spread out in a rough line on their side of a default 5v5-sized list, weapon defaults to Longsword, and no engagements/down/disarmed state is inferred (there was nowhere to record it before).
 
 ## Extending it
 
-Everything is vanilla HTML/CSS/JS in one file, so it's easy to fork. Natural next steps if you want them later: a read-only shareable match viewer, PNG export of a formation, or CSV export of the fighter roster.
+Everything is vanilla HTML/CSS/JS in one file, so it's easy to fork. Natural next steps if you want them later: a read-only shareable match viewer, PNG/SVG export of a single snapshot for match reports, or CSV export of the fighter roster.
