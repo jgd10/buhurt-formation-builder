@@ -325,7 +325,11 @@ function renderMatchSetup(){
     </div>
   </div>`);
 
-  card.querySelector('#mTitle').oninput = e => { state.title = e.target.value; render(); };
+  card.querySelector('#mTitle').oninput = e => {
+    state.title = e.target.value;
+    save();
+    document.getElementById('matchSub').textContent = state.title + (state.date ? ' · ' + state.date : '') + ' · ' + state.format;
+  };
   card.querySelector('#mDate').oninput = e => { state.date = e.target.value; save(); };
   card.querySelector('#mLoc').oninput = e => { state.location = e.target.value; save(); };
   card.querySelector('#mNotes').oninput = e => { state.notes = e.target.value; save(); };
@@ -359,7 +363,12 @@ function renderMatchSetup(){
       </div>
       <div class="hint">Up to 3 colours</div>
     </div>`);
-    block.querySelector('.tname-input').oninput = e => { team.name = e.target.value; render(); };
+    block.querySelector('.tname-input').oninput = e => {
+      team.name = e.target.value;
+      save();
+      const label = document.getElementById('teamLabel_'+key);
+      if(label) label.textContent = team.name;
+    };
     const swRow = block.querySelector('.swatch-row');
     team.colors.forEach((c, ci) => {
       const sw = el(`<input type="color" class="swatch" value="${c}">`);
@@ -391,7 +400,7 @@ function renderFightersCard(){
   ['teamA','teamB'].forEach((key, i) => {
     const team = state.teams[i];
     const col = el(`<div>
-      <div style="font-weight:600;margin-bottom:8px;color:${team.colors[0]||'var(--ink)'}">${escapeHtml(team.name)}</div>
+      <div id="teamLabel_${key}" style="font-weight:600;margin-bottom:8px;color:${team.colors[0]||'var(--ink)'}">${escapeHtml(team.name)}</div>
       <div class="roster" data-team="${key}"></div>
       <div class="add-fighter-form" data-team="${key}">
         <input class="new-fname" placeholder="Name">
