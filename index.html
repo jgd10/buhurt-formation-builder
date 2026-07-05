@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Formation Ledger — Buhurt Tactical Analysis</title>
+<title>Buhurt Formation Tool</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Spectral:wght@400;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
@@ -134,13 +134,6 @@
   .inspector .row{margin-bottom:10px;}
   .status-toggles{display:flex;gap:6px;}
   .status-toggles button{flex:1;font-size:11px;padding:6px 4px;}
-  .engage-list{display:flex;flex-direction:column;gap:4px;max-height:160px;overflow-y:auto;}
-  .engage-chip{
-    display:flex;align-items:center;justify-content:space-between;gap:6px;font-size:12px;
-    padding:5px 7px;border:1px solid var(--hairline);border-radius:4px;background:var(--panel);cursor:pointer;
-  }
-  .engage-chip.linked{border-color:var(--brass);background:rgba(185,138,61,.14);}
-  .engage-chip .lk{color:var(--brass);font-size:11px;}
 
   .empty-state{color:var(--ink-dim);font-size:13px;padding:20px;text-align:center;border:1px dashed var(--hairline);border-radius:6px;}
   .row-inline{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
@@ -155,7 +148,7 @@
 <header class="top">
   <div class="brand">
     <span class="mark">⚔</span>
-    <h1>Formation Ledger</h1>
+    <h1>Buhurt Formation Tool</h1>
     <span class="sub" id="matchSub">no match loaded</span>
   </div>
   <div class="top-actions">
@@ -170,14 +163,26 @@
 
 <script>
 /* ---------- constants ---------- */
-const STORAGE_KEY = 'buhurt-formation-ledger-v2';
+const STORAGE_KEY = 'buhurt-formation-tool-v3';
 const FORMATS = {
   '3v3':   { lengthRange:[7,20],  widthRange:[5,15],   defaultLength:10, defaultWidth:7 },
   '5v5':   { lengthRange:[9,20],  widthRange:[7,15],   defaultLength:12, defaultWidth:9 },
   '12v12': { lengthRange:[15,20], widthRange:[7,15],   defaultLength:17, defaultWidth:10 },
   '30v30': { lengthRange:[25,30], widthRange:[12.5,20],defaultLength:27, defaultWidth:15 }
 };
-const WEAPONS = ['Longsword','Sword & Buckler','Sword & Shield','Poleaxe','Halberd','Mace & Shield','Spear','Unarmed','Other'];
+const WEAPONS = [
+  { name: 'Sword/Axe/Mace & Shield',   symbol: '◆' },
+  { name: 'Sword/Axe/Mace & Buckler',  symbol: '◇' },
+  { name: 'Solo Sword/Axe/Mace',       symbol: '●' },
+  { name: 'Long Axe',                  symbol: '↑' },
+  { name: 'Poleaxe',                   symbol: '╬' },
+  { name: 'Longsword',                 symbol: '‖' },
+  { name: 'Two-Handed Falchion',       symbol: '≈' },
+  { name: 'Other',                     symbol: '?' }
+];
+const WEAPON_NAMES = WEAPONS.map(w => w.name);
+function weaponSymbol(name){ const w = WEAPONS.find(x => x.name === name); return w ? w.symbol : '?'; }
+const DOWN_REASONS = ['Fall','Decision','Armour failure'];
 
 let state = null;
 let ui = { activeSnapshotId: null, selected: null, dragging: null };
@@ -215,7 +220,7 @@ function defaultMarshals(w,l){
   ];
 }
 
-function save(){ localStorage.setItem(STORAGE_KEY, JSON.stringify({ version: 2, match: state })); }
+function save(){ localStorage.setItem(STORAGE_KEY, JSON.stringify({ version: 3, match: state })); }
 function load(){
   const raw = localStorage.getItem(STORAGE_KEY);
   if(raw){
@@ -240,7 +245,6 @@ function ensureSnapshotShape(s){
   s.positions = s.positions || { teamA:{}, teamB:{} };
   s.positions.teamA = s.positions.teamA || {};
   s.positions.teamB = s.positions.teamB || {};
-  s.engagements = s.engagements || [];
 }
 
 function onFieldEntries(snapshot, team){
@@ -253,20 +257,11 @@ function benchFighters(snapshot, team){
 }
 
 function placeOnField(snapshot, team, fighterId, x, y){
-  snapshot.positions[team][fighterId] = { x, y, down:false, disarmed:false, weapon: fighterById(team,fighterId).defaultWeapon || 'Unarmed' };
+  snapshot.positions[team][fighterId] = { x, y, down:false, downReason:null, disarmed:false, weapon: fighterById(team,fighterId).defaultWeapon || WEAPON_NAMES[0] };
 }
 function removeFromField(snapshot, team, fighterId){
   delete snapshot.positions[team][fighterId];
-  snapshot.engagements = snapshot.engagements.filter(([a,b]) => a!==fighterId && b!==fighterId);
   if(ui.selected && ui.selected.fighterId === fighterId) ui.selected = null;
-}
-function toggleEngagement(snapshot, idA, idB){
-  const idx = snapshot.engagements.findIndex(([a,b]) => (a===idA&&b===idB)||(a===idB&&b===idA));
-  if(idx>-1) snapshot.engagements.splice(idx,1);
-  else snapshot.engagements.push([idA, idB]);
-}
-function isEngaged(snapshot, idA, idB){
-  return snapshot.engagements.some(([a,b]) => (a===idA&&b===idB)||(a===idB&&b===idA));
 }
 
 /* ---------- render shell ---------- */
@@ -336,8 +331,8 @@ function renderMatchSetup(){
   card.querySelector('#mFormat').onchange = e => {
     state.format = e.target.value;
     const f = FORMATS[state.format];
-    state.list.length = clamp(state.list.length, f.lengthRange[0], f.lengthRange[1]) || f.defaultLength;
-    state.list.width = clamp(state.list.width, f.widthRange[0], f.widthRange[1]) || f.defaultWidth;
+    state.list.length = f.defaultLength;
+    state.list.width = f.defaultWidth;
     render();
   };
   card.querySelector('#mLength').onchange = e => {
@@ -390,8 +385,8 @@ function clamp(v,min,max){ return Math.min(max, Math.max(min, v)); }
 
 /* ---------- fighters ---------- */
 function weaponSelectHtml(cls, current){
-  const known = WEAPONS.includes(current) ? current : 'Other';
-  return `<select class="${cls}">${WEAPONS.map(w => `<option value="${w}" ${w===known?'selected':''}>${w}</option>`).join('')}</select>`;
+  const known = WEAPON_NAMES.includes(current) ? current : 'Other';
+  return `<select class="${cls}">${WEAPONS.map(w => `<option value="${w.name}" ${w.name===known?'selected':''}>${w.symbol} ${w.name}</option>`).join('')}</select>`;
 }
 
 function renderFightersCard(){
@@ -467,8 +462,8 @@ function renderTimelineCard(){
   const addChip = el(`<button class="add-snap-chip" title="New snapshot">+</button>`);
   addChip.onclick = () => {
     const prev = activeSnapshot();
-    const s = { id: uid('snap'), timestamp:'', phase:'', notes:'', positions:{teamA:{},teamB:{}}, engagements:[] };
-    if(prev){ ensureSnapshotShape(prev); s.positions = JSON.parse(JSON.stringify(prev.positions)); s.engagements = JSON.parse(JSON.stringify(prev.engagements)); }
+    const s = { id: uid('snap'), timestamp:'', phase:'', notes:'', positions:{teamA:{},teamB:{}} };
+    if(prev){ ensureSnapshotShape(prev); s.positions = JSON.parse(JSON.stringify(prev.positions)); }
     state.snapshots.push(s);
     ui.activeSnapshotId = s.id; ui.selected = null;
     render();
@@ -503,7 +498,7 @@ function renderListEditor(snapshot){
       </div>
       <div class="inspector" id="inspectorArea"></div>
     </div>
-    <div class="hint">Click an empty bench name to place that fighter on the list. Drag fighters or marshals to reposition. Click a placed fighter to select it and edit weapon / down / disarmed / engagements. Click a marshal on the field to remove it.</div>
+    <div class="hint">Click an empty bench name to place that fighter on the list. Drag fighters or marshals to reposition. Click a placed fighter to select it and edit weapon, down, or disarmed status. Click a marshal on the field to remove it.</div>
   </div>`);
 
   card.querySelector('#sTime').oninput = e => { snapshot.timestamp = e.target.value; save(); refreshTimeline(); };
@@ -579,16 +574,10 @@ function buildFieldSVG(snapshot){
   // centre line
   line(0, L/2, W, L/2, 'var(--ink-dim)', '0.15,0.1', 0.03);
 
-  // engagement lines (draw first so fighters render on top)
+  // fighters
   const teamAOn = onFieldEntries(snapshot,'teamA');
   const teamBOn = onFieldEntries(snapshot,'teamB');
   const allOn = [...teamAOn.map(e=>({...e,team:'teamA'})), ...teamBOn.map(e=>({...e,team:'teamB'}))];
-  snapshot.engagements.forEach(([a,b]) => {
-    const pa = allOn.find(e=>e.fighterId===a), pb = allOn.find(e=>e.fighterId===b);
-    if(pa && pb) line(pa.x, pa.y, pb.x, pb.y, 'var(--rust)', '0.12,0.08', 0.045);
-  });
-
-  // fighters
   allOn.forEach(entry => {
     const team = entry.team;
     const teamMeta = state.teams[team==='teamA'?0:1];
@@ -597,24 +586,32 @@ function buildFieldSVG(snapshot){
     const g = document.createElementNS(NS,'g');
     g.setAttribute('transform', `translate(${entry.x},${entry.y})`);
     g.style.cursor = 'grab';
+    g.setAttribute('opacity', entry.down ? 0.55 : 1);
     const isSel = ui.selected && ui.selected.fighterId === entry.fighterId;
 
-    const circle = document.createElementNS(NS,'circle');
-    circle.setAttribute('r', 0.42);
-    circle.setAttribute('fill', entry.down ? '#5a5f66' : (teamMeta.colors[0] || '#888'));
-    circle.setAttribute('opacity', entry.down ? 0.55 : 1);
-    circle.setAttribute('stroke', isSel ? 'var(--gold)' : '#000000aa');
-    circle.setAttribute('stroke-width', isSel ? 0.09 : 0.03);
-    g.appendChild(circle);
+    // concentric rings: colour 1 centre, ringed by colour 2, ringed by colour 3
+    const cols = teamMeta.colors.length ? teamMeta.colors : ['#888'];
+    const ringColor = i => cols[i] !== undefined ? cols[i] : cols[cols.length-1];
+    const outerR = 0.46, midR = 0.31, innerR = 0.16;
+    [[outerR,2],[midR,1],[innerR,0]].forEach(([r,ci]) => {
+      const c = document.createElementNS(NS,'circle');
+      c.setAttribute('r', r);
+      c.setAttribute('fill', entry.down ? '#5a5f66' : ringColor(ci));
+      if(r === outerR){
+        c.setAttribute('stroke', isSel ? 'var(--gold)' : '#000000aa');
+        c.setAttribute('stroke-width', isSel ? 0.09 : 0.03);
+      }
+      g.appendChild(c);
+    });
 
     const label = document.createElementNS(NS,'text');
-    label.setAttribute('x',0); label.setAttribute('y',0.14);
+    label.setAttribute('x',0); label.setAttribute('y',0.11);
     label.setAttribute('text-anchor','middle');
-    label.setAttribute('font-size','0.4');
+    label.setAttribute('font-size','0.3');
     label.setAttribute('font-family','IBM Plex Mono, monospace');
     label.setAttribute('fill','#fff');
     label.setAttribute('font-weight','600');
-    label.textContent = (f.name||'?').slice(0,2).toUpperCase();
+    label.textContent = (f.name||'?').slice(0,3).toUpperCase() + weaponSymbol(entry.weapon);
     g.appendChild(label);
 
     if(entry.disarmed){
@@ -628,9 +625,9 @@ function buildFieldSVG(snapshot){
     if(entry.down){
       const dn = document.createElementNS(NS,'text');
       dn.setAttribute('x',0); dn.setAttribute('y',0.85);
-      dn.setAttribute('text-anchor','middle'); dn.setAttribute('font-size','0.26');
+      dn.setAttribute('text-anchor','middle'); dn.setAttribute('font-size','0.24');
       dn.setAttribute('fill','var(--ink-dim)'); dn.setAttribute('font-family','IBM Plex Mono, monospace');
-      dn.textContent = 'DOWN';
+      dn.textContent = 'DOWN' + (entry.downReason ? ' · ' + entry.downReason.toUpperCase() : '');
       g.appendChild(dn);
     }
 
@@ -733,7 +730,7 @@ function buildBench(snapshot){
 function buildInspector(snapshot){
   const wrap = document.createElement('div');
   if(!ui.selected){
-    wrap.innerHTML = `<h3>Inspector</h3><div class="empty">Click a fighter on the list to edit their weapon, status, and engagements.</div>`;
+    wrap.innerHTML = `<h3>Inspector</h3><div class="empty">Click a fighter on the list to edit their weapon and status.</div>`;
     return wrap;
   }
   const { team, fighterId } = ui.selected;
@@ -747,7 +744,7 @@ function buildInspector(snapshot){
     <div class="row">
       <label>Weapon</label>
       ${weaponSelectHtml('weapSel', entry.weapon)}
-      <input class="weapOther" style="margin-top:6px;width:100%;display:${WEAPONS.includes(entry.weapon)?'none':'block'}" placeholder="Custom weapon" value="${WEAPONS.includes(entry.weapon)?'':escapeAttr(entry.weapon)}">
+      <div class="hint">Switch weapons any time — this only affects the current snapshot onward.</div>
     </div>
     <div class="row">
       <label>Status</label>
@@ -755,53 +752,39 @@ function buildInspector(snapshot){
         <button class="toggle ${entry.down?'on':''}" id="downBtn">${entry.down?'Down ✓':'Mark down'}</button>
         <button class="toggle ${entry.disarmed?'on':''}" id="disarmBtn">${entry.disarmed?'Disarmed ✓':'Mark disarmed'}</button>
       </div>
+      ${entry.down ? `
+        <div style="margin-top:8px;">
+          <label>Reason</label>
+          <select id="downReasonSel">
+            ${DOWN_REASONS.map(r => `<option value="${r}" ${entry.downReason===r?'selected':''}>${r}</option>`).join('')}
+          </select>
+        </div>` : ''}
     </div>
     <div class="row">
       <button class="danger" id="removeBtn" style="width:100%;">Remove from list</button>
     </div>
-    <div class="row">
-      <label>Engaged with</label>
-      <div class="engage-list" id="engageList"></div>
-    </div>
   `;
 
   wrap.querySelector('.weapSel').onchange = e => {
-    if(e.target.value === 'Other'){
-      wrap.querySelector('.weapOther').style.display = 'block';
-      entry.weapon = wrap.querySelector('.weapOther').value || 'Other';
-    } else {
-      entry.weapon = e.target.value;
-      wrap.querySelector('.weapOther').style.display = 'none';
-    }
+    entry.weapon = e.target.value;
     save(); refreshField();
   };
-  wrap.querySelector('.weapOther').oninput = e => { entry.weapon = e.target.value; save(); };
-  wrap.querySelector('#downBtn').onclick = () => { entry.down = !entry.down; save(); refreshField(); refreshInspector(); };
+  wrap.querySelector('#downBtn').onclick = () => {
+    entry.down = !entry.down;
+    entry.downReason = entry.down ? (entry.downReason || DOWN_REASONS[0]) : null;
+    save(); refreshField(); refreshInspector();
+  };
   wrap.querySelector('#disarmBtn').onclick = () => { entry.disarmed = !entry.disarmed; save(); refreshField(); refreshInspector(); };
   wrap.querySelector('#removeBtn').onclick = () => { removeFromField(snapshot, team, fighterId); refreshField(); refreshInspector(); refreshBench(); };
-
-  const engageList = wrap.querySelector('#engageList');
-  const others = [
-    ...onFieldEntries(snapshot,'teamA').map(e=>({...e,team:'teamA'})),
-    ...onFieldEntries(snapshot,'teamB').map(e=>({...e,team:'teamB'}))
-  ].filter(e => e.fighterId !== fighterId);
-  if(!others.length){ engageList.innerHTML = '<div class="empty">No other fighters on the list.</div>'; }
-  others.forEach(other => {
-    const of = fighterById(other.team, other.fighterId);
-    const linked = isEngaged(snapshot, fighterId, other.fighterId);
-    const chip = document.createElement('div');
-    chip.className = 'engage-chip' + (linked ? ' linked' : '');
-    chip.innerHTML = `<span>${escapeHtml(of.name)} <small style="color:var(--ink-dim)">(${state.teams[other.team==='teamA'?0:1].name})</small></span><span class="lk">${linked?'✓ linked':'link'}</span>`;
-    chip.onclick = () => { toggleEngagement(snapshot, fighterId, other.fighterId); save(); refreshField(); refreshInspector(); };
-    engageList.appendChild(chip);
-  });
+  const reasonSel = wrap.querySelector('#downReasonSel');
+  if(reasonSel) reasonSel.onchange = e => { entry.downReason = e.target.value; save(); refreshField(); };
 
   return wrap;
 }
 
 /* ---------- import / export ---------- */
 function doExport(){
-  const payload = { version: 2, match: state };
+  const payload = { version: 3, match: state };
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -854,10 +837,10 @@ function migrateV1(oldMatch){
       entries.forEach(([slotKey,fighterId], i) => {
         const x = list.width * ((i+1)/(n+1));
         const y = ti===0 ? list.length*0.2 : list.length*0.8;
-        positions[team][fighterId] = { x, y, down:false, disarmed:false, weapon:'Longsword' };
+        positions[team][fighterId] = { x, y, down:false, downReason:null, disarmed:false, weapon:'Longsword' };
       });
     });
-    return { id: s.id || uid('snap'), timestamp: s.timestamp||'', phase: s.phase||'', notes: s.notes||'', positions, engagements: [] };
+    return { id: s.id || uid('snap'), timestamp: s.timestamp||'', phase: s.phase||'', notes: s.notes||'', positions };
   });
   return m;
 }
