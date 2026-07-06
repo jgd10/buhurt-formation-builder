@@ -182,12 +182,23 @@ const WEAPONS = [
 ];
 const WEAPON_NAMES = WEAPONS.map(w => w.name);
 function weaponSymbol(name){ const w = WEAPONS.find(x => x.name === name); return w ? w.symbol : '?'; }
+function initials(name){
+  const letters = (name||'').toUpperCase().replace(/[^A-Z]/g,'');
+  const consonants = letters.replace(/[AEIOU]/g,'');
+  return (consonants.length >= 3 ? consonants : letters).slice(0,3);
+}
 const DOWN_REASONS = ['Fall','Decision','Armour failure'];
+const DUMMY_NAMES = ['Frodo','Samwise','Pippin','Merry','Aragorn','Legolas','Gandalf','Boromir','Faramir','Eomir','Eowyn','Theoden','Saruman','Picker','Blend','Antsy','Fiddler','Hedge','Whiskeyjack','Quick','Hairlock','Kalam','Aimless','Ganoes','Toc','Mallet','Bluepearl','Detoran','Spindle','Trotts','Sorry','Brackle','Ash','Corinn','Bent','Galahad','Lancelot','Arthur','Bedivere','Bors','Gawain','Kay','Merlin','Mordred'];
+const DUMMY_PALETTE = ['#9c4a35','#3d6a9c','#7a5f30','#4a7a5f','#6a3d9c','#9c3d6a','#3d9c8a','#9c8a3d','#5f3d9c','#9c5f3d','#3d5f9c','#8a9c3d'];
+function shuffle(arr){
+  const a = arr.slice();
+  for(let i=a.length-1;i>0;i--){ const j = Math.floor(Math.random()*(i+1)); [a[i],a[j]] = [a[j],a[i]]; }
+  return a;
+}
 
 let state = null;
-let ui = { activeSnapshotId: null, selected: null, dragging: null };
+let ui = { activeSnapshotId: null, selected: null, drawMode: false, drawColor: '#ff4d4d' };
 // ui.selected = { team, fighterId } — fighter currently on field, shown in inspector
-// ui.dragging = { kind:'fighter'|'marshal', team?, fighterId?, marshalId? }
 
 function uid(prefix){ return prefix + '_' + Math.random().toString(36).slice(2,9); }
 
@@ -197,7 +208,6 @@ function blankMatch(){
     id: uid('match'),
     title: 'Untitled Match',
     date: '',
-    location: '',
     notes: '',
     format: '5v5',
     list: { length: fmt.defaultLength, width: fmt.defaultWidth },
@@ -245,6 +255,7 @@ function ensureSnapshotShape(s){
   s.positions = s.positions || { teamA:{}, teamB:{} };
   s.positions.teamA = s.positions.teamA || {};
   s.positions.teamB = s.positions.teamB || {};
+  s.annotations = s.annotations || [];
 }
 
 function onFieldEntries(snapshot, team){
@@ -273,45 +284,43 @@ function render(){
   document.getElementById('matchSub').textContent = state.title + (state.date ? ' · ' + state.date : '') + ' · ' + state.format;
   const app = document.getElementById('app');
   app.innerHTML = '';
+  const snap = activeSnapshot();
+  if(snap){ ensureSnapshotShape(snap); app.appendChild(renderListEditor(snap)); }
+  else { app.appendChild(renderNoSnapshotCard()); }
   app.appendChild(renderMatchSetup());
   app.appendChild(renderFightersCard());
   app.appendChild(renderTimelineCard());
-  const snap = activeSnapshot();
-  if(snap){ ensureSnapshotShape(snap); app.appendChild(renderListEditor(snap)); }
   save();
+}
+function renderNoSnapshotCard(){
+  return el(`<div class="card"><h2><span class="num">01</span> The list</h2><div class="empty-state">No snapshots yet. Add one from the Timeline card below to start recording positions.</div></div>`);
 }
 
 /* ---------- match setup ---------- */
 function renderMatchSetup(){
   const fmt = FORMATS[state.format];
   const card = el(`<div class="card">
-    <h2><span class="num">01</span> Match</h2>
+    <h2><span class="num">02</span> Match</h2>
     <div class="field-row">
       <div><label>Title</label><input id="mTitle" value="${escapeAttr(state.title)}"></div>
       <div><label>Date</label><input id="mDate" type="date" value="${escapeAttr(state.date||'')}"></div>
-      <div><label>Location</label><input id="mLoc" value="${escapeAttr(state.location||'')}"></div>
     </div>
     <div class="field-row"><div><label>Notes</label><textarea id="mNotes">${escapeHtml(state.notes||'')}</textarea></div></div>
 
-    <div class="grid-3">
-      <div>
-        <label>Format</label>
-        <select id="mFormat">
-          ${Object.keys(FORMATS).map(k => `<option value="${k}" ${k===state.format?'selected':''}>${k}</option>`).join('')}
-        </select>
-        <div class="hint">Length ${fmt.lengthRange[0]}–${fmt.lengthRange[1]} m · Width ${fmt.widthRange[0]}–${fmt.widthRange[1]} m</div>
-      </div>
-      <div>
-        <label>List length (m)</label>
-        <input id="mLength" type="number" step="0.5" min="${fmt.lengthRange[0]}" max="${fmt.lengthRange[1]}" value="${state.list.length}">
-      </div>
-      <div>
-        <label>List width (m)</label>
-        <input id="mWidth" type="number" step="0.5" min="${fmt.widthRange[0]}" max="${fmt.widthRange[1]}" value="${state.list.width}">
-      </div>
+    <div style="max-width:260px;">
+      <label>Format</label>
+      <select id="mFormat">
+        ${Object.keys(FORMATS).map(k => `<option value="${k}" ${k===state.format?'selected':''}>${k}</option>`).join('')}
+      </select>
+      <div class="hint">List size: ${state.list.length}m × ${state.list.width}m (fixed by format)</div>
     </div>
 
     <div class="grid-2" id="teamSetup" style="margin-top:14px;"></div>
+
+    <div class="row-inline" style="margin-top:10px;">
+      <button id="dummyTeamsBtn">Generate dummy teams</button>
+      <span class="hint" style="margin:0;">Replaces both rosters with random names, weapons, and colours, sized to the current format.</span>
+    </div>
 
     <div class="marshal-panel">
       <span style="font-size:12px;color:var(--ink-dim);">Marshals &amp; linesmen: ${state.marshals.length} placed</span>
@@ -326,7 +335,6 @@ function renderMatchSetup(){
     document.getElementById('matchSub').textContent = state.title + (state.date ? ' · ' + state.date : '') + ' · ' + state.format;
   };
   card.querySelector('#mDate').oninput = e => { state.date = e.target.value; save(); };
-  card.querySelector('#mLoc').oninput = e => { state.location = e.target.value; save(); };
   card.querySelector('#mNotes').oninput = e => { state.notes = e.target.value; save(); };
   card.querySelector('#mFormat').onchange = e => {
     state.format = e.target.value;
@@ -335,18 +343,11 @@ function renderMatchSetup(){
     state.list.width = f.defaultWidth;
     render();
   };
-  card.querySelector('#mLength').onchange = e => {
-    state.list.length = clamp(parseFloat(e.target.value)||fmt.defaultLength, fmt.lengthRange[0], fmt.lengthRange[1]);
-    render();
-  };
-  card.querySelector('#mWidth').onchange = e => {
-    state.list.width = clamp(parseFloat(e.target.value)||fmt.defaultWidth, fmt.widthRange[0], fmt.widthRange[1]);
-    render();
-  };
   card.querySelector('#addMarshalBtn').onclick = () => {
     state.marshals.push({ id: uid('m'), x: state.list.width/2, y: state.list.length/2 });
     render();
   };
+  card.querySelector('#dummyTeamsBtn').onclick = generateDummyTeams;
 
   const teamSetup = card.querySelector('#teamSetup');
   ['teamA','teamB'].forEach((key, i) => {
@@ -383,6 +384,38 @@ function renderMatchSetup(){
 }
 function clamp(v,min,max){ return Math.min(max, Math.max(min, v)); }
 
+function generateDummyTeams(){
+  if(!confirm('This replaces both teams\' rosters, weapons, and colours with randomised dummy data, and clears anyone currently placed on the list. Continue?')) return;
+  const perTeam = parseInt(state.format.split('v')[0], 10) || 5;
+  const pool = shuffle(DUMMY_NAMES);
+  const realWeapons = WEAPON_NAMES.filter(n => n !== 'Other');
+  const types = ['grappler','striker','generalist','runner','other'];
+  function makeRoster(offset){
+    const roster = [];
+    for(let i=0;i<perTeam;i++){
+      const idx = offset+i;
+      let name = pool[idx % pool.length];
+      const wrap = Math.floor(idx / pool.length);
+      if(wrap>0) name = name + ' ' + (wrap+1);
+      roster.push({
+        id: uid('f'), name,
+        beltNumber: String(i+1),
+        type: types[Math.floor(Math.random()*types.length)],
+        defaultWeapon: realWeapons[Math.floor(Math.random()*realWeapons.length)],
+        tags: []
+      });
+    }
+    return roster;
+  }
+  state.fighters.teamA = makeRoster(0);
+  state.fighters.teamB = makeRoster(perTeam);
+  state.teams[0].colors = shuffle(DUMMY_PALETTE).slice(0, 1 + Math.floor(Math.random()*3));
+  state.teams[1].colors = shuffle(DUMMY_PALETTE).slice(0, 1 + Math.floor(Math.random()*3));
+  state.snapshots.forEach(s => { ensureSnapshotShape(s); s.positions = { teamA:{}, teamB:{} }; });
+  ui.selected = null;
+  render();
+}
+
 /* ---------- fighters ---------- */
 function weaponSelectHtml(cls, current){
   const known = WEAPON_NAMES.includes(current) ? current : 'Other';
@@ -390,7 +423,7 @@ function weaponSelectHtml(cls, current){
 }
 
 function renderFightersCard(){
-  const card = el(`<div class="card"><h2><span class="num">02</span> Fighters</h2><div class="grid-2" id="rosterCols"></div></div>`);
+  const card = el(`<div class="card"><h2><span class="num">03</span> Fighters</h2><div class="grid-2" id="rosterCols"></div></div>`);
   const cols = card.querySelector('#rosterCols');
   ['teamA','teamB'].forEach((key, i) => {
     const team = state.teams[i];
@@ -407,7 +440,7 @@ function renderFightersCard(){
           <option value="runner">Runner</option>
           <option value="other">Other</option>
         </select>
-        ${weaponSelectHtml('new-weapon','Longsword')}
+        ${weaponSelectHtml('new-weapon','Poleaxe')}
         <button class="primary add-fighter-btn">Add</button>
       </div>
     </div>`);
@@ -448,12 +481,11 @@ function fighterRow(team, f){
 
 /* ---------- timeline ---------- */
 function renderTimelineCard(){
-  const card = el(`<div class="card"><h2><span class="num">03</span> Timeline</h2><div class="timeline" id="timelineRow"></div></div>`);
+  const card = el(`<div class="card"><h2><span class="num">04</span> Timeline</h2><div class="timeline" id="timelineRow"></div></div>`);
   const row = card.querySelector('#timelineRow');
   state.snapshots.forEach((s, idx) => {
     const chip = el(`<div class="snap-chip ${s.id===ui.activeSnapshotId?'active':''}">
       <div class="t">${s.timestamp !== undefined && s.timestamp !== '' ? escapeHtml(String(s.timestamp)) : '#'+(idx+1)}</div>
-      <div class="p">${escapeHtml(s.phase||'(unlabeled)')}</div>
       <div class="n">${escapeHtml(s.notes||'')}</div>
     </div>`);
     chip.onclick = () => { ui.activeSnapshotId = s.id; ui.selected = null; render(); };
@@ -462,8 +494,8 @@ function renderTimelineCard(){
   const addChip = el(`<button class="add-snap-chip" title="New snapshot">+</button>`);
   addChip.onclick = () => {
     const prev = activeSnapshot();
-    const s = { id: uid('snap'), timestamp:'', phase:'', notes:'', positions:{teamA:{},teamB:{}} };
-    if(prev){ ensureSnapshotShape(prev); s.positions = JSON.parse(JSON.stringify(prev.positions)); }
+    const s = { id: uid('snap'), timestamp:'', notes:'', positions:{teamA:{},teamB:{}}, annotations:[] };
+    if(prev){ ensureSnapshotShape(prev); s.positions = JSON.parse(JSON.stringify(prev.positions)); s.annotations = JSON.parse(JSON.stringify(prev.annotations||[])); }
     state.snapshots.push(s);
     ui.activeSnapshotId = s.id; ui.selected = null;
     render();
@@ -480,16 +512,22 @@ let svgRef = null;
 
 function renderListEditor(snapshot){
   const card = el(`<div class="card">
-    <h2><span class="num">04</span> The list</h2>
+    <h2><span class="num">01</span> The list</h2>
     <div class="field-row">
       <div><label>Timestamp</label><input id="sTime" value="${escapeAttr(snapshot.timestamp||'')}" placeholder="e.g. 00:32 or round-1"></div>
-      <div><label>Phase</label><input id="sPhase" value="${escapeAttr(snapshot.phase||'')}" placeholder="e.g. engagement, regroup"></div>
       <div class="row-inline" style="align-items:flex-end;">
         <button id="dupSnapBtn">Duplicate</button>
         <button class="danger" id="delSnapBtn">Delete</button>
       </div>
     </div>
     <div class="field-row"><div><label>Notes</label><textarea id="sNotes">${escapeHtml(snapshot.notes||'')}</textarea></div></div>
+
+    <div class="row-inline" style="margin-bottom:8px;">
+      <button id="drawToggleBtn" class="${ui.drawMode?'primary':''}">${ui.drawMode ? 'Drawing… (click to stop)' : 'Draw on list'}</button>
+      <input type="color" id="drawColorPick" value="${ui.drawColor}" title="Annotation colour">
+      <button id="undoAnnBtn">Undo stroke</button>
+      <button class="danger" id="clearAnnBtn">Clear annotations</button>
+    </div>
 
     <div class="list-wrap">
       <div>
@@ -498,12 +536,15 @@ function renderListEditor(snapshot){
       </div>
       <div class="inspector" id="inspectorArea"></div>
     </div>
-    <div class="hint">Click an empty bench name to place that fighter on the list. Drag fighters or marshals to reposition. Click a placed fighter to select it and edit weapon, down, or disarmed status. Click a marshal on the field to remove it.</div>
+    <div class="hint">Click an empty bench name to place that fighter on the list. Drag fighters or marshals to reposition. Click a placed fighter to select it and edit weapon, down, or disarmed status. Click a marshal on the field to remove it. Toggle "Draw on list" to sketch freehand arrows or notes over the field.</div>
   </div>`);
 
   card.querySelector('#sTime').oninput = e => { snapshot.timestamp = e.target.value; save(); refreshTimeline(); };
-  card.querySelector('#sPhase').oninput = e => { snapshot.phase = e.target.value; save(); refreshTimeline(); };
   card.querySelector('#sNotes').oninput = e => { snapshot.notes = e.target.value; save(); refreshTimeline(); };
+  card.querySelector('#drawToggleBtn').onclick = () => { ui.drawMode = !ui.drawMode; ui.selected = null; render(); };
+  card.querySelector('#drawColorPick').oninput = e => { ui.drawColor = e.target.value; };
+  card.querySelector('#undoAnnBtn').onclick = () => { snapshot.annotations.pop(); save(); refreshField(); };
+  card.querySelector('#clearAnnBtn').onclick = () => { snapshot.annotations = []; save(); refreshField(); };
   card.querySelector('#dupSnapBtn').onclick = () => {
     const copy = JSON.parse(JSON.stringify(snapshot));
     copy.id = uid('snap');
@@ -556,6 +597,7 @@ function buildFieldSVG(snapshot){
   const NS = 'http://www.w3.org/2000/svg';
   const svg = document.createElementNS(NS,'svg');
   svg.setAttribute('viewBox', `${-pad} ${-pad} ${vbW} ${vbH}`);
+  svg.style.cursor = ui.drawMode ? 'crosshair' : 'default';
   svgRef = svg;
 
   function line(x1,y1,x2,y2,stroke,dash,w){
@@ -598,8 +640,8 @@ function buildFieldSVG(snapshot){
       c.setAttribute('r', r);
       c.setAttribute('fill', entry.down ? '#5a5f66' : ringColor(ci));
       if(r === outerR){
-        c.setAttribute('stroke', isSel ? 'var(--gold)' : '#000000aa');
-        c.setAttribute('stroke-width', isSel ? 0.09 : 0.03);
+        c.setAttribute('stroke', '#000000aa');
+        c.setAttribute('stroke-width', 0.03);
       }
       g.appendChild(c);
     });
@@ -609,9 +651,9 @@ function buildFieldSVG(snapshot){
     label.setAttribute('text-anchor','middle');
     label.setAttribute('font-size','0.3');
     label.setAttribute('font-family','IBM Plex Mono, monospace');
-    label.setAttribute('fill','#fff');
+    label.setAttribute('fill', isSel ? '#00e5ff' : '#fff');
     label.setAttribute('font-weight','600');
-    label.textContent = (f.name||'?').slice(0,3).toUpperCase() + weaponSymbol(entry.weapon);
+    label.textContent = initials(f.name) + weaponSymbol(entry.weapon);
     g.appendChild(label);
 
     if(entry.disarmed){
@@ -632,6 +674,7 @@ function buildFieldSVG(snapshot){
     }
 
     g.addEventListener('pointerdown', (e) => {
+      if(ui.drawMode) return;
       e.preventDefault();
       ui.selected = { team, fighterId: entry.fighterId };
       refreshInspector();
@@ -655,6 +698,7 @@ function buildFieldSVG(snapshot){
     g.appendChild(c);
     let moved = false;
     g.addEventListener('pointerdown', (e) => {
+      if(ui.drawMode) return;
       e.preventDefault();
       moved = false;
       startDrag(svg, e, (pt) => {
@@ -673,7 +717,58 @@ function buildFieldSVG(snapshot){
     svg.appendChild(g);
   });
 
+  // stored annotations (drawn on top of everything else)
+  (snapshot.annotations||[]).forEach(stroke => {
+    const poly = document.createElementNS(NS,'polyline');
+    poly.setAttribute('points', stroke.points.map(p=>p.join(',')).join(' '));
+    poly.setAttribute('fill','none');
+    poly.setAttribute('stroke', stroke.color || '#ff4d4d');
+    poly.setAttribute('stroke-width', 0.08);
+    poly.setAttribute('stroke-linecap','round');
+    poly.setAttribute('stroke-linejoin','round');
+    svg.appendChild(poly);
+  });
+
+  attachDrawing(svg, snapshot);
   return svg;
+}
+
+function attachDrawing(svg, snapshot){
+  const NS = 'http://www.w3.org/2000/svg';
+  svg.addEventListener('pointerdown', (e) => {
+    if(!ui.drawMode) return;
+    e.preventDefault();
+    const pts = [];
+    const poly = document.createElementNS(NS,'polyline');
+    poly.setAttribute('fill','none');
+    poly.setAttribute('stroke', ui.drawColor);
+    poly.setAttribute('stroke-width', 0.08);
+    poly.setAttribute('stroke-linecap','round');
+    poly.setAttribute('stroke-linejoin','round');
+    svg.appendChild(poly);
+    function addPoint(evt){
+      const pt = svg.createSVGPoint();
+      pt.x = evt.clientX; pt.y = evt.clientY;
+      const p = pt.matrixTransform(svg.getScreenCTM().inverse());
+      pts.push([Math.round(p.x*100)/100, Math.round(p.y*100)/100]);
+      poly.setAttribute('points', pts.map(pp => pp.join(',')).join(' '));
+    }
+    addPoint(e);
+    function move(evt){ addPoint(evt); }
+    function up(){
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      if(pts.length > 1){
+        snapshot.annotations = snapshot.annotations || [];
+        snapshot.annotations.push({ id: uid('ann'), color: ui.drawColor, points: pts });
+        save();
+      } else {
+        poly.remove();
+      }
+    }
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  });
 }
 function refreshMarshalCount(){
   render(); // marshal count text lives in match setup card; simplest to full re-render
@@ -713,7 +808,7 @@ function buildBench(snapshot){
       chip.innerHTML = `${escapeHtml(f.name)}<small>${f.type}</small>`;
       chip.onclick = () => {
         const x = state.list.width * (team==='teamA' ? 0.3 + Math.random()*0.4 : 0.3 + Math.random()*0.4);
-        const y = team==='teamA' ? state.list.length*0.18 : state.list.length*0.82;
+        const y = team==='teamA' ? state.list.length*0.82 : state.list.length*0.18;
         placeOnField(snapshot, team, f.id, x, y);
         refreshField(); refreshBench(); render();
       };
@@ -813,7 +908,7 @@ function doImport(file){
       m.snapshots = m.snapshots || [];
       m.snapshots.forEach(s => { s.id = s.id || uid('snap'); ensureSnapshotShape(s); });
       state = m;
-      ui = { activeSnapshotId: state.snapshots.length ? state.snapshots[0].id : null, selected: null };
+      ui = { activeSnapshotId: state.snapshots.length ? state.snapshots[0].id : null, selected: null, drawMode: false, drawColor: ui.drawColor || '#ff4d4d' };
       render();
     }catch(err){
       alert('Import failed: ' + err.message);
@@ -836,11 +931,11 @@ function migrateV1(oldMatch){
       const n = entries.length || 1;
       entries.forEach(([slotKey,fighterId], i) => {
         const x = list.width * ((i+1)/(n+1));
-        const y = ti===0 ? list.length*0.2 : list.length*0.8;
+        const y = ti===0 ? list.length*0.8 : list.length*0.2;
         positions[team][fighterId] = { x, y, down:false, downReason:null, disarmed:false, weapon:'Longsword' };
       });
     });
-    return { id: s.id || uid('snap'), timestamp: s.timestamp||'', phase: s.phase||'', notes: s.notes||'', positions };
+    return { id: s.id || uid('snap'), timestamp: s.timestamp||'', notes: s.notes||'', positions, annotations: [] };
   });
   return m;
 }
@@ -849,7 +944,7 @@ function migrateV1(oldMatch){
 document.getElementById('newMatchBtn').onclick = () => {
   if(!confirm('Start a new match? Export first if you want to keep the current one.')) return;
   state = blankMatch();
-  ui = { activeSnapshotId: null, selected: null };
+  ui = { activeSnapshotId: null, selected: null, drawMode: false, drawColor: ui.drawColor || '#ff4d4d' };
   render();
 };
 document.getElementById('exportBtn').onclick = doExport;

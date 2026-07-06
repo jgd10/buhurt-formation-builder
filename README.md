@@ -20,30 +20,36 @@ No server, database, or API keys are needed — it's entirely client-side.
 
 ## How it works
 
-- **Match** — title, date, location, notes, format (3v3/5v5/12v12/30v30 — each constrains the list's allowed length/width range per the rules), list length and width in metres, and the two teams (name + up to 3 colours each). Changing format snaps the list to that format's default size.
-- **Fighters** — added per team, with name, optional belt number, type (grappler/striker/generalist/runner/other), and a default weapon from the fixed set: sword/axe/mace & shield, sword/axe/mace & buckler, solo sword/axe/mace, long axe, poleaxe, longsword, two-handed falchion.
-- **Marshals & linesmen** — the gold dots. Add as many as you like from the match card; drag them into position directly on the list; click one on the list to remove it. They're shared across the whole match rather than reset per snapshot.
-- **Timeline** — snapshots in the order you create them. Click **+** to add one (it starts as a copy of the previous snapshot, so you're not rebuilding everyone from scratch each time), click a chip to open it, **Duplicate** to branch a variation.
-- **The list (snapshot editor)** — a to-scale top-down view of the field:
-  - Fighters not yet on the list sit in the **bench** row below it; click a name to drop them onto their team's side.
+The list (the field) is the first thing on screen, followed by Match, Fighters, and Timeline.
+
+- **The list** — a to-scale top-down view, Team A at the bottom, Team B at the top:
+  - Fighters not yet on the list sit in the **bench** row below it; click a name to drop them onto their team's side. Adding or removing a fighter from a roster updates the list immediately.
   - Drag any fighter or marshal directly on the list to reposition them freely — there's no grid or slots, just real coordinates.
-  - Each fighter is shown as concentric rings of their team's colours (colour 1 at the centre, ringed by colour 2, ringed by colour 3, for teams that use more than one), labelled with the first 3 letters of their name plus a symbol for their current weapon.
-  - Click a fighter to open the **inspector**, where you can switch their weapon at any point mid-fight, and toggle **Down** (they stay on the list, greyed out, as part of the battlefield, and you pick a reason — fall, decision, or armour failure) and **Disarmed** independently.
-  - Click **Remove from list** in the inspector to send a fighter back to the bench for that snapshot.
+  - Each fighter is shown as concentric rings of their team's colours (colour 1 at the centre, ringed by colour 2, ringed by colour 3, for teams using more than one), labelled with up to 3 consonants from their name (vowels are only pulled back in if that leaves fewer than 3 characters — JACK → JCK, JOE → JOE, MAX → MAX, MAXY → MXY) plus a symbol for their current weapon. The selected fighter's label turns cyan instead of being ringed/highlighted.
+  - Click a fighter to open the **inspector**: switch their weapon at any point mid-fight, toggle **Down** (they stay on the list, greyed out, as part of the battlefield — pick a reason: fall, decision, or armour failure) and **Disarmed** independently, or remove them from the list.
+  - **Draw on list** toggles freehand annotation mode — sketch arrows or notes straight onto the field in a colour of your choice; **Undo stroke** and **Clear annotations** clean it up. Annotations are stored per snapshot.
+- **Match** — title, date, notes, and format (3v3/5v5/12v12/30v30). Picking a format snaps the list to that format's standard size automatically (not manually adjustable). Team names and up to 3 colours each. **Generate dummy teams** fills both rosters with randomised names, weapons, and colour schemes sized to the current format — handy for testing without real fighter data.
+- **Fighters** — added per team, with name, optional belt number, type (grappler/striker/generalist/runner/other), and a default weapon from the fixed set: sword/axe/mace & shield, sword/axe/mace & buckler, solo sword/axe/mace, long axe, poleaxe, longsword, two-handed falchion. New fighters default to poleaxe (the closest match to "halberd" in this list — see note below).
+- **Marshals & linesmen** — the gold dots. Add as many as you like from the match card; drag them into position directly on the list; click one on the list to remove it. Shared across the whole match rather than reset per snapshot.
+- **Timeline** — snapshots in the order you create them. Click **+** to add one (starts as a copy of the previous snapshot's positions and annotations), click a chip to open it, **Duplicate** to branch a variation.
 
 ## Data & persistence
 
 - Your current match autosaves to the browser's `localStorage` as you work, so a page refresh won't lose your place.
 - `localStorage` is per-browser, per-device — it isn't shared or backed up anywhere. **Use Export JSON** to save a match file you can keep, share, or re-import later (on this device or any other).
 - **Export JSON** downloads a versioned file (`{ "version": 3, "match": {...} }`).
-- **Import JSON** loads a previously exported file, replacing whatever match is currently open. Older `version: 1` files (from the original numbered-slot layout) are auto-migrated: fighters are spread out in a rough line on their side of a default 5v5-sized list with a placeholder weapon, since there was nowhere to record weapon/status data in that format.
+- **Import JSON** loads a previously exported file, replacing whatever match is currently open. Older `version: 1` files (from the original numbered-slot layout) are auto-migrated.
 
 ## Known constraints (by design)
 
 - Exactly 2 teams per match, up to 3 colours per team.
-- List length/width are clamped to the selected format's allowed range (e.g. 5v5 is 9–20m long, 7–15m wide).
+- List size is fixed to the selected format's standard dimensions — there's no manual length/width override.
 - Weapons are drawn from the fixed 7-category list above (plus a generic "Other" symbol as a catch-all) — there's no free-text weapon field.
 - No combat simulation, AI, scoring, or enforced tactical meaning — positions, weapons, and status are whatever you record; the app just shows it back to you.
+
+## A note on "Halberd"
+
+The weapon list uses "Poleaxe" rather than "Halberd" (they're often used interchangeably in HMB circles, and the list doesn't have room for both). New fighters default to Poleaxe. If you'd rather have a separate Halberd category, that's a quick addition — just say the word.
 
 ## Extending it
 
