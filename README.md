@@ -18,39 +18,58 @@ There's no build step. Everything lives in `index.html`.
 
 No server, database, or API keys are needed — it's entirely client-side.
 
+## Layout
+
+Screen order, top to bottom: a dismissible **What is this?** intro (first-time only), **Timeline**, **The list**, **Match**, **Fighters**.
+
 ## How it works
 
-The list (the field) is the first thing on screen, followed by Match, Fighters, and Timeline.
-
+- **Timeline** — snapshots in the order you create them. Click **+** to add one (starts as a copy of the previous snapshot's positions and annotations), click a chip to open it, **Duplicate formation** to branch a variation.
 - **The list** — a to-scale top-down view, Team A at the bottom, Team B at the top:
   - Fighters not yet on the list sit in the **bench** row below it; click a name to drop them onto their team's side. Adding or removing a fighter from a roster updates the list immediately.
-  - Drag any fighter or marshal directly on the list to reposition them freely — there's no grid or slots, just real coordinates.
-  - Each fighter is shown as concentric rings of their team's colours (colour 1 at the centre, ringed by colour 2, ringed by colour 3, for teams using more than one), labelled with up to 3 consonants from their name (vowels are only pulled back in if that leaves fewer than 3 characters — JACK → JCK, JOE → JOE, MAX → MAX, MAXY → MXY) plus a symbol for their current weapon. The selected fighter's label turns cyan instead of being ringed/highlighted.
-  - Click a fighter to open the **inspector**: switch their weapon at any point mid-fight, toggle **Down** (they stay on the list, greyed out, as part of the battlefield — pick a reason: fall, decision, or armour failure) and **Disarmed** independently, or remove them from the list.
-  - **Draw on list** toggles freehand annotation mode — sketch arrows or notes straight onto the field in a colour of your choice; **Undo stroke** and **Clear annotations** clean it up. Annotations are stored per snapshot.
-- **Match** — title, date, notes, and format (3v3/5v5/12v12/30v30). Picking a format snaps the list to that format's standard size automatically (not manually adjustable). Team names and up to 3 colours each. **Generate dummy teams** fills both rosters with randomised names, weapons, and colour schemes sized to the current format — handy for testing without real fighter data.
-- **Fighters** — added per team, with name, optional belt number, type (grappler/striker/generalist/runner/other), and a default weapon from the fixed set: sword/axe/mace & shield, sword/axe/mace & buckler, solo sword/axe/mace, long axe, poleaxe, longsword, two-handed falchion. New fighters default to poleaxe (the closest match to "halberd" in this list — see note below).
-- **Marshals & linesmen** — the gold dots. Add as many as you like from the match card; drag them into position directly on the list; click one on the list to remove it. Shared across the whole match rather than reset per snapshot.
-- **Timeline** — snapshots in the order you create them. Click **+** to add one (starts as a copy of the previous snapshot's positions and annotations), click a chip to open it, **Duplicate** to branch a variation.
+  - Drag any fighter or marshal directly on the list to reposition them freely, or turn on **Snap to 0.5m grid** for tidier, measured placement.
+  - Each fighter is shown as concentric rings of their team's colours, labelled with up to 3 consonants from their name plus a symbol for their current weapon. A name starting with a vowel always keeps that vowel as the first letter of its label (AARON → ARN, ANDREW → AND); otherwise vowels are dropped unless there aren't 3 consonants to use (JOE → JOE, MAX → MAX, MAXY → MXY). The selected fighter's label turns cyan.
+  - Click a fighter to open the **inspector**: switch weapon mid-fight, toggle **Down** (with a reason — fall, decision, or armour failure) and **Disarmed**, or remove them.
+  - **Draw on list** sketches freehand arrows or notes over the field in a colour of your choice; **Undo stroke** / **Clear annotations** clean it up. Annotations are stored per snapshot.
+  - **Arrange** applies a formation template (line, wedge, echelon left/right, refused flank) to a whole team's roster in one click.
+  - A stats line shows how many of each roster are on the list, and flags any pairs of fighters that look like they're overlapping.
+- **Match** — title, date, notes, and format (3v3/5v5/12v12/30v30, which fixes the list's standard size — not manually adjustable). Team names and up to 3 colours each. **Generate both dummy teams** (or the per-team **Generate dummy team** button) fills rosters with randomised names, weapons, and colours sized to the current format — handy for building your own team and testing against a placeholder opponent.
+- **Fighters** — name, optional belt number, type, and a default weapon from the fixed set: sword/axe/mace & shield, sword/axe/mace & buckler, solo sword/axe/mace, long axe, poleaxe, longsword, two-handed falchion. New fighters default to poleaxe (see the note on "Halberd" below).
+- **Marshals & linesmen** — the gold dots, added/positioned from the Match card, shared across the whole match.
+
+## Shortcuts
+
+- `Ctrl+Z` / `Ctrl+Shift+Z` (or `Ctrl+Y`) — undo / redo. Covers roster, placement, status, weapon, marshal, snapshot, template, and annotation changes. Undo/redo buttons are also in the header.
+- `D` — toggle Draw mode.
+- `Delete` / `Backspace` — remove the currently selected fighter from the list.
+Shortcuts are ignored while typing in a text field.
 
 ## Data & persistence
 
 - Your current match autosaves to the browser's `localStorage` as you work, so a page refresh won't lose your place.
-- `localStorage` is per-browser, per-device — it isn't shared or backed up anywhere. **Use Export JSON** to save a match file you can keep, share, or re-import later (on this device or any other).
-- **Export JSON** downloads a versioned file (`{ "version": 3, "match": {...} }`).
-- **Import JSON** loads a previously exported file, replacing whatever match is currently open. Older `version: 1` files (from the original numbered-slot layout) are auto-migrated.
+- `localStorage` is per-browser, per-device — it isn't shared or backed up anywhere. **Save formation file** downloads a JSON file you can keep, share, or re-import later.
+- **Export as image** rasterises the current list to a PNG — good for dropping into Discord or WhatsApp.
+- **Load formation file** replaces whatever match is currently open. Older `version: 1` files (from the original numbered-slot layout) are auto-migrated.
 
 ## Known constraints (by design)
 
 - Exactly 2 teams per match, up to 3 colours per team.
-- List size is fixed to the selected format's standard dimensions — there's no manual length/width override.
-- Weapons are drawn from the fixed 7-category list above (plus a generic "Other" symbol as a catch-all) — there's no free-text weapon field.
-- No combat simulation, AI, scoring, or enforced tactical meaning — positions, weapons, and status are whatever you record; the app just shows it back to you.
+- List size is fixed to the selected format's standard dimensions.
+- Weapons are drawn from the fixed 7-category list above (plus a generic "Other" symbol as a catch-all).
+- No combat simulation, AI, scoring, or enforced tactical meaning.
 
 ## A note on "Halberd"
 
-The weapon list uses "Poleaxe" rather than "Halberd" (they're often used interchangeably in HMB circles, and the list doesn't have room for both). New fighters default to Poleaxe. If you'd rather have a separate Halberd category, that's a quick addition — just say the word.
+The weapon list uses "Poleaxe" rather than "Halberd" (often used interchangeably in HMB circles). New fighters default to Poleaxe. Happy to add Halberd as its own category if you'd rather keep them distinct.
+
+## What's not in here yet
+
+A few requested ideas didn't make this round, either because they need infrastructure this tool intentionally doesn't have, or to keep the change set reviewable:
+
+- **Shareable link** — this app has no backend by design (nothing to host, nothing to pay for, works from a static file). A real link-sharing feature needs somewhere to store the state server-side, or a URL long enough to encode a whole match, which gets unreliable fast with bigger rosters and annotations. **Save/Load formation file** is the supported way to share a match for now; happy to revisit if you want to add lightweight hosting.
+- **Distance measurement tool** and a **dedicated attack-direction arrow control** — freehand drawing already covers both informally (draw a line and eyeball it, or draw an arrow), but neither has a purpose-built, precise control yet.
+- **Experience-level colour coding** — there's no "experience" attribute on a fighter yet; weapon type already gets its own symbol.
 
 ## Extending it
 
-Everything is vanilla HTML/CSS/JS in one file, so it's easy to fork. Natural next steps if you want them later: a read-only shareable match viewer, PNG/SVG export of a single snapshot for match reports, or CSV export of the fighter roster.
+Everything is vanilla HTML/CSS/JS in one file, so it's easy to fork. Natural next steps if you want them later: a read-only shareable match viewer, CSV export of the fighter roster, or a real distance/measurement tool.
